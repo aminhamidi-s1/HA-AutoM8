@@ -6,6 +6,25 @@ The `upstream` remote tracks the original repo. Use the commands below to pull u
 
 ---
 
+## Repository Layout
+
+```
+ai-siem_HA/              ← project root (your fork's workspace)
+├── jarvis/              ← HELIOS app (all upstream jarvis files live here)
+│   ├── Backend/
+│   ├── Frontend/
+│   ├── docker-compose.yml
+│   └── ...
+├── CLAUDE.md            ← project instruction set (yours, never overwritten)
+├── UPSTREAM.md          ← this file
+├── tasks/               ← session tracking (yours)
+└── .claude/agents/      ← all subagent definitions (yours)
+```
+
+All `docker compose` commands must be run from the `jarvis/` directory.
+
+---
+
 ## Remote Setup (already done — reference only)
 
 ```bash
@@ -20,7 +39,7 @@ git remote -v
 
 ## Pull Upstream Updates
 
-Run these commands to pull the latest changes from the original repo into your fork:
+Run these commands to pull the latest changes from the original repo:
 
 ```bash
 # 1. Fetch all upstream branches (does not modify your local files)
@@ -29,9 +48,13 @@ git fetch upstream
 # 2. Make sure you are on your main branch
 git checkout main
 
-# 3. Merge upstream/main into your local main
-#    Your local customizations (CLAUDE.md, tasks/, .claude/) are preserved
+# 3. Merge upstream/main
+#    NOTE: upstream files will land in jarvis/ after the merge
+#    Your local files (CLAUDE.md, tasks/, .claude/) are preserved
 git merge upstream/main --no-edit
+
+# 4. Move any new upstream root-level files into jarvis/ if needed
+#    (git mv <file> jarvis/<file> for any new files that land at root)
 ```
 
 ### If you have local commits that conflict
@@ -67,9 +90,11 @@ git diff HEAD upstream/main --name-only
 
 ## After Merging — Rebuild Docker
 
-If upstream changes include Dockerfile, requirements, or generator/parser files, rebuild:
+All Docker commands run from `jarvis/`:
 
 ```bash
+cd jarvis
+
 # Rebuild and restart both services
 docker compose build --no-cache && docker compose up -d
 
@@ -108,6 +133,25 @@ tasks/lessons.md       # Accumulated lessons
 ```
 
 ---
+
+## Docker Quick Reference
+
+```bash
+cd jarvis
+
+# Start
+docker compose up -d
+
+# Stop
+docker compose down
+
+# Logs
+docker logs -f jarvis-api
+docker logs -f jarvis-frontend
+
+# Rebuild after code changes
+docker compose build --no-cache && docker compose up -d
+```
 
 ## Services
 
