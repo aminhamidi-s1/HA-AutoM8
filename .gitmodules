@@ -1,0 +1,3 @@
+[submodule "ai-siem"]
+	path = ai-siem
+	url = https://github.com/Sentinel-One/ai-siem.git
