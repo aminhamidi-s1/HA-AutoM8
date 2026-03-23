@@ -1,0 +1,266 @@
+"""Business logic for destination management"""
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy import select, delete
+from typing import List, Optional
+import logging
+from datetime import datetime
+
+from app.models.destination import Destination, Base
+from app.models.settings import Setting  # Import to register with Base.metadata
+from app.utils.encryption import get_encryption_instance
+from app.core.config import settings
+
+logger = logging.getLogger(__name__)
+
+# Create async engine and session
+engine = create_async_engine(
+    settings.DATABASE_URL,
+    echo=False,
+    future=True
+)
+
+async_session_maker = sessionmaker(
+    engine, class_=AsyncSession, expire_on_commit=False
+)
+
+
+async def init_db():
+    """Initialize database tables and migrate schema if needed"""
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+        
+        # Migrate existing tables: add any missing columns
+        await conn.run_sync(_migrate_destinations_table)
+    
+    logger.info("Destinations database initialized")
+
+
+def _migrate_destinations_table(conn):
+    """Add missing columns to the destinations table for schema evolution"""
+    import sqlalchemy as sa
+    
+    inspector = sa.inspect(conn)
+    if not inspector.has_table("destinations"):
+        return
+    
+    existing_cols = {col["name"] for col in inspector.get_columns("destinations")}
+    model_cols = {col.name: col for col in Destination.__table__.columns}
+    
+    for col_name, col_obj in model_cols.items():
+        if col_name not in existing_cols:
+            col_type = col_obj.type.compile(dialect=conn.dialect)
+            logger.info(f"Migrating destinations table: adding column '{col_name}' ({col_type})")
+            conn.execute(sa.text(f"ALTER TABLE destinations ADD COLUMN {col_name} {col_type}"))
+
+
+async def get_session() -> AsyncSession:
+    """Get database session"""
+    async with async_session_maker() as session:
+        yield session
+
+
+class DestinationService:
+    """Service for managing destinations"""
+    
+    def __init__(self, session: AsyncSession, encryption_key: Optional[str] = None):
+        self.session = session
+        self.encryption = get_encryption_instance(encryption_key or settings.SECRET_KEY)
+    
+    async def create_destination(
+        self,
+        name: str,
+        dest_type: str,
+        url: Optional[str] = None,
+        token: Optional[str] = None,
+        config_api_url: Optional[str] = None,
+        config_write_token: Optional[str] = None,
+        powerquery_read_token: Optional[str] = None,
+        s1_management_url: Optional[str] = None,
+        s1_api_token: Optional[str] = None,
+        uam_ingest_url: Optional[str] = None,
+        uam_account_id: Optional[str] = None,
+        uam_site_id: Optional[str] = None,
+        uam_service_token: Optional[str] = None,
+        ip: Optional[str] = None,
+        port: Optional[int] = None,
+        protocol: Optional[str] = None
+    ) -> Destination:
+        """
+        Create a new destination
+        
+        Args:
+            name: Destination name (must be unique)
+            dest_type: 'hec' or 'syslog'
+            url: HEC URL (for HEC destinations)
+            token: HEC token (for HEC destinations, will be encrypted)
+            config_api_url: Config API URL for parser management (e.g., https://xdr.us1.sentinelone.net)
+            config_write_token: Config API token for reading and writing parsers (will be encrypted)
+            powerquery_read_token: PowerQuery Log Read Access token for querying SIEM data (will be encrypted)
+            s1_management_url: S1 Management API URL for asset lookups (e.g., https://demo.sentinelone.net)
+            s1_api_token: S1 API Token for management API calls (will be encrypted)
+            ip: Syslog IP (for syslog destinations)
+            port: Syslog port (for syslog destinations)
+            protocol: 'UDP' or 'TCP' (for syslog destinations)
+            
+        Returns:
+            Created Destination object
+        """
+        # Generate ID - find the next available number for this type
+        result = await self.session.execute(
+            select(Destination).where(Destination.type == dest_type)
+        )
+        existing = result.scalars().all()
+        
+        # Extract numbers from existing IDs and find max
+        max_num = 0
+        for dest in existing:
+            try:
+                num = int(dest.id.split(':')[1])
+                if num > max_num:
+                    max_num = num
+            except (IndexError, ValueError):
+                continue
+        
+        dest_id = f"{dest_type}:{max_num + 1}"
+        
+        # Create destination
+        destination = Destination(
+            id=dest_id,
+            name=name,
+            type=dest_type
+        )
+        
+        if dest_type == 'hec':
+            destination.url = url
+            if token:
+                destination.token_encrypted = self.encryption.encrypt(token)
+            if config_api_url:
+                destination.config_api_url = config_api_url.rstrip('/')
+            if config_write_token:
+                destination.config_write_token_encrypted = self.encryption.encrypt(config_write_token)
+            if powerquery_read_token:
+                destination.powerquery_read_token_encrypted = self.encryption.encrypt(powerquery_read_token)
+            if s1_management_url:
+                destination.s1_management_url = s1_management_url.rstrip('/')
+            if s1_api_token:
+                destination.s1_api_token_encrypted = self.encryption.encrypt(s1_api_token)
+            if uam_ingest_url:
+                destination.uam_ingest_url = uam_ingest_url.rstrip('/')
+            if uam_account_id:
+                destination.uam_account_id = uam_account_id
+            if uam_site_id:
+                destination.uam_site_id = uam_site_id
+            if uam_service_token:
+                destination.uam_service_token_encrypted = self.encryption.encrypt(uam_service_token)
+        elif dest_type == 'syslog':
+            destination.ip = ip
+            destination.port = port
+            destination.protocol = protocol
+        
+        self.session.add(destination)
+        await self.session.commit()
+        await self.session.refresh(destination)
+        
+        logger.info(f"Created destination: {dest_id} ({name})")
+        return destination
+    
+    async def get_destination(self, dest_id: str) -> Optional[Destination]:
+        """Get a destination by ID"""
+        result = await self.session.execute(
+            select(Destination).where(Destination.id == dest_id)
+        )
+        return result.scalar_one_or_none()
+    
+    async def get_destination_by_name(self, name: str) -> Optional[Destination]:
+        """Get a destination by name"""
+        result = await self.session.execute(
+            select(Destination).where(Destination.name == name)
+        )
+        return result.scalar_one_or_none()
+    
+    async def list_destinations(self) -> List[Destination]:
+        """List all destinations"""
+        result = await self.session.execute(select(Destination))
+        return result.scalars().all()
+    
+    async def update_destination(
+        self,
+        dest_id: str,
+        name: Optional[str] = None,
+        url: Optional[str] = None,
+        token: Optional[str] = None,
+        config_api_url: Optional[str] = None,
+        config_write_token: Optional[str] = None,
+        powerquery_read_token: Optional[str] = None,
+        s1_management_url: Optional[str] = None,
+        s1_api_token: Optional[str] = None,
+        uam_ingest_url: Optional[str] = None,
+        uam_account_id: Optional[str] = None,
+        uam_site_id: Optional[str] = None,
+        uam_service_token: Optional[str] = None,
+        ip: Optional[str] = None,
+        port: Optional[int] = None,
+        protocol: Optional[str] = None
+    ) -> Optional[Destination]:
+        """Update a destination"""
+        destination = await self.get_destination(dest_id)
+        if not destination:
+            return None
+        
+        if name:
+            destination.name = name
+        
+        if destination.type == 'hec':
+            if url:
+                destination.url = url
+            if token:
+                destination.token_encrypted = self.encryption.encrypt(token)
+            if config_api_url:
+                destination.config_api_url = config_api_url.rstrip('/')
+            if config_write_token:
+                destination.config_write_token_encrypted = self.encryption.encrypt(config_write_token)
+            if powerquery_read_token:
+                destination.powerquery_read_token_encrypted = self.encryption.encrypt(powerquery_read_token)
+            if s1_management_url is not None:
+                destination.s1_management_url = s1_management_url.rstrip('/') if s1_management_url else None
+            if s1_api_token:
+                destination.s1_api_token_encrypted = self.encryption.encrypt(s1_api_token)
+            if uam_ingest_url:
+                destination.uam_ingest_url = uam_ingest_url.rstrip('/')
+            if uam_account_id:
+                destination.uam_account_id = uam_account_id
+            if uam_site_id is not None:  # Allow clearing site_id with empty string
+                destination.uam_site_id = uam_site_id or None
+            if uam_service_token:
+                destination.uam_service_token_encrypted = self.encryption.encrypt(uam_service_token)
+        elif destination.type == 'syslog':
+            if ip:
+                destination.ip = ip
+            if port:
+                destination.port = port
+            if protocol:
+                destination.protocol = protocol
+        
+        destination.updated_at = datetime.utcnow()
+        await self.session.commit()
+        await self.session.refresh(destination)
+        
+        logger.info(f"Updated destination: {dest_id}")
+        return destination
+    
+    async def delete_destination(self, dest_id: str) -> bool:
+        """Delete a destination"""
+        result = await self.session.execute(
+            delete(Destination).where(Destination.id == dest_id)
+        )
+        await self.session.commit()
+        
+        deleted = result.rowcount > 0
+        if deleted:
+            logger.info(f"Deleted destination: {dest_id}")
+        return deleted
+    
+    def decrypt_token(self, encrypted_token: str) -> str:
+        """Decrypt a token"""
+        return self.encryption.decrypt(encrypted_token)

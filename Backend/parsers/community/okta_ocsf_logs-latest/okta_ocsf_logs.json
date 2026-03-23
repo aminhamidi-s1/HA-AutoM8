@@ -1,0 +1,179 @@
+{
+  "attributes": {
+    "dataSource.category": "security",
+    "dataSource.name": "Okta",
+    "dataSource.vendor": "Okta"
+  },
+  "formats": [
+    {
+      "format": ".*published",
+      "attributes": {
+        "category_uid": "3",
+        "category_name": "Audit Activity",
+        "class_uid": "3006",
+        "class_name": "Access Activity",
+        "severity_id": "99",
+        "activity_id": "99",
+        "type_uid": "300699",
+        "metadata.product.vendor_name": "Okta",
+        "metadata.product.name": "Okta",
+        "metadata.version": "1.0.0-rc.2"
+      }
+    },
+    {
+      "format": ".*${parse=dottedJson}{attrBlacklist=(detailEntry|type|authenticationStep|target|request|userId|timeUnit|timeSpan|threshold|requestId|rateLimitSecondsToReset|rateLimitScopeType|rateLimitBucketUuid|dtHash|securityContext|requestApiTokenId)}$",
+      "rewrites": [
+        {
+          "input": "actor.alternateId",
+          "output": "actor.user.email_addr",
+          "match": ".*",
+          "replace": "$0"
+        },
+        {
+          "input": "actor.displayName",
+          "output": "actor.user.name",
+          "match": ".*",
+          "replace": "$0"
+        },
+        {
+          "input": "actor.id",
+          "output": "actor.user.uid",
+          "match": ".*",
+          "replace": "$0"
+        },
+        {
+          "input": "actor.type",
+          "output": "actor.user.type",
+          "match": ".*",
+          "replace": "$0"
+        },
+        {
+          "input": "client.ipAddress",
+          "output": "src_endpoint.ip",
+          "match": ".*",
+          "replace": "$0"
+        },
+        {
+          "input": "client.device",
+          "output": "unmapped.client.device",
+          "match": ".*",
+          "replace": "$0"
+        },
+        {
+          "input": "client.id",
+          "output": "src_endpoint.uid",
+          "match": ".*",
+          "replace": "$0"
+        },
+        {
+          "input": "client.zone",
+          "output": "src_endpoint.domain",
+          "match": ".*",
+          "replace": "$0"
+        },
+        {
+          "input": "client.geographicalContext.city",
+          "output": "src_endpoint.location.city",
+          "match": ".*",
+          "replace": "$0"
+        },
+        {
+          "input": "client.geographicalContext.country",
+          "output": "src_endpoint.location.country",
+          "match": ".*",
+          "replace": "$0"
+        },
+        {
+          "input": "client.geographicalContext.postalCode",
+          "output": "src_endpoint.location.postal_code",
+          "match": ".*",
+          "replace": "$0"
+        },
+        {
+          "input": "client.geographicalContext.state",
+          "output": "src_endpoint.location.region",
+          "match": ".*",
+          "replace": "$0"
+        },
+        {
+          "input": "securityContext.isp",
+          "output": "src_endpoint.location.isp",
+          "match": ".*",
+          "replace": "$0"
+        },
+        {
+          "input": "client.userAgent.rawUserAgent",
+          "output": "http_request.user_agent",
+          "match": ".*",
+          "replace": "$0"
+        },
+        {
+          "input": "eventType",
+          "output": "unmapped.eventType",
+          "match": ".*",
+          "replace": "$0"
+        },
+        {
+          "input": "eventType",
+          "output": "event.type",
+          "match": ".*",
+          "replace": "$0"
+        },
+        {
+          "input": "eventType",
+          "output": "activity_name",
+          "match": ".*",
+          "replace": "$0"
+        },
+        {
+          "input": "legacyEventType",
+          "output": "unmapped.legacyEventType",
+          "match": ".*",
+          "replace": "$0"
+        },
+        {
+          "input": "outcome.result",
+          "output": "status",
+          "match": ".*",
+          "replace": "$0"
+        },
+        {
+          "input": "outcome.reason",
+          "output": "status_detail",
+          "match": ".*",
+          "replace": "$0"
+        },
+        {
+          "input": "_time",
+          "output": "timestamp",
+          "match": ".*",
+          "replace": "$0"
+        },
+        {
+          "input": "published",
+          "output": "time",
+          "match": ".*",
+          "replace": "$0"
+        },
+        {
+          "input": "displayMessage",
+          "output": "message",
+          "match": ".*",
+          "replace": "$0"
+        },
+        {
+          "input": "uuid",
+          "output": "metadata.uid",
+          "match": ".*",
+          "replace": "$0"
+        },
+        {
+          "input": "severity",
+          "output": "severity",
+          "match": ".*",
+          "replace": "$0"
+        }
+      ]
+    }
+  ]
+}

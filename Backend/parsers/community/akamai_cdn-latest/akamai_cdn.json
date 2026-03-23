@@ -1,0 +1,140 @@
+{
+  "attributes": {
+    "dataSource.vendor": "Akamai",
+    "dataSource.name": "Akamai CDN",
+    "dataSource.category": "security",
+    "dataSource.technology": "content_delivery_network",
+    "source": "akamai_cdn"
+  },
+  
+  "patterns": {},
+  
+  "formats": [
+    {
+      "id": "akamai_cdn_json",
+      "format": ".*${parse=json}$",
+      "attributes": {
+        "dataSource.app": "Akamai CDN Access Logs",
+        "class_uid": 4002,
+        "class_name": "HTTP Activity", 
+        "category_uid": 4,
+        "category_name": "Network Activity",
+        "type_uid": 400201,
+        "activity_id": 1,
+        "activity_name": "HTTP Request",
+        "severity_id": 1
+      },
+      "rewrites": [
+        {
+          "input": "timestamp",
+          "output": "time",
+          "match": ".*",
+          "replace": "$0"
+        },
+        {
+          "input": "client_ip", 
+          "output": "src_endpoint.ip",
+          "match": ".*",
+          "replace": "$0"
+        },
+        {
+          "input": "edge_ip",
+          "output": "dst_endpoint.ip", 
+          "match": ".*",
+          "replace": "$0"
+        },
+        {
+          "input": "host",
+          "output": "http_request.hostname",
+          "match": ".*", 
+          "replace": "$0"
+        },
+        {
+          "input": "method",
+          "output": "http_request.http_method",
+          "match": ".*",
+          "replace": "$0"
+        },
+        {
+          "input": "path",
+          "output": "http_request.url.path",
+          "match": ".*",
+          "replace": "$0"
+        },
+        {
+          "input": "status_code",
+          "output": "http_response.code",
+          "match": ".*",
+          "replace": "$0"
+        },
+        {
+          "input": "bytes",
+          "output": "http_response.length",
+          "match": ".*",
+          "replace": "$0"
+        },
+        {
+          "input": "response_time_ms",
+          "output": "response_time",
+          "match": ".*", 
+          "replace": "$0"
+        },
+        {
+          "input": "cache_status",
+          "output": "enrichments.cache_status",
+          "match": ".*",
+          "replace": "$0"
+        },
+        {
+          "input": "country",
+          "output": "src_endpoint.location.country",
+          "match": ".*",
+          "replace": "$0"
+        },
+        {
+          "input": "city", 
+          "output": "src_endpoint.location.city",
+          "match": ".*",
+          "replace": "$0"
+        },
+        {
+          "input": "request_id",
+          "output": "metadata.correlation_uid",
+          "match": ".*",
+          "replace": "$0"
+        },
+        {
+          "input": "stream_id",
+          "output": "metadata.log_name",
+          "match": ".*",
+          "replace": "$0"
+        },
+        {
+          "input": "config_id",
+          "output": "metadata.product.feature.uid",
+          "match": ".*",
+          "replace": "$0"
+        },
+        {
+          "input": "status_code",
+          "output": "status_id",
+          "match": "^2\\d{2}$",
+          "replace": "1"
+        },
+        {
+          "input": "status_code", 
+          "output": "status_id",
+          "match": "^[45]\\d{2}$",
+          "replace": "2"
+        },
+        {
+          "input": "client_ip",
+          "output": "observables",
+          "match": ".*",
+          "replace": "[{\"type\":\"IP Address\",\"value\":\"$0\",\"type_id\":2},{\"type\":\"Hostname\",\"value\":\"${host}\",\"type_id\":1}]"
+        }
+      ],
+      "halt": true
+    }
+  ]
+}
